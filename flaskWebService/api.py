@@ -1,40 +1,55 @@
 from flask import Flask
 from flask_restful import Resource, Api
-from flask_mysqldb import MySQL
-from secrets import secrets
+import mysql.connector
 
 app = Flask(__name__)
-s = secrets()
 
 # https://flask-mysqldb.readthedocs.io/en/latest/
-app.config['MYSQL_HOST'] = s.host
-app.config['MYSQL_USER'] = s.user
-app.config['MYSQL_PASSWORD'] = s.dBpw
-app.config['MYSQL_DB'] = 'ardoinodata'
+mydb = mysql.connector.connect(
+    host="localhost",
+    user="dbuser",
+    password="dbpassword",
+    database="spaces"
+)
 
 api = Api(app)
-mysql = MySQL(app)
 
 
 def writeIntoDB(temp, hum, date):
     try:
-        cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO arduinodata VALUES (%d, %d, %s)", (temp, hum, date))
-        mysql.connection.commit()
-        cur.close()
-        return "db writing success"
+        mycursor = mydb.cursor()
+
+        sql = "INSERT INTO arduinodata (temp, hum, date) VALUES (%s, %s, %s)"
+        val = (temp, hum, date)
+        mycursor.execute(sql, val)
+        mydb.commit()
+        return "data inserted."
     except:
         return "db writing failed"
 
 
+def write_txt(temp, hum, date):
+    try:
+        path = "data.txt"
+        update = str(temp) + "," + str(hum) + "," + date + "\n"
+        my_file = open(path, "a")
+        my_file.write(update)
+        my_file.close()
+        status = "added"
+    except:
+        status = "not added"
+    return status
+
+
 class MyData(Resource):
     def get(self, temp, hum, date):
-        status = writeIntoDB(temp, hum, date)
-        return {"job": {"temp": temp, "hum": hum, "date": date}, "status": status}
+        sta = write_txt(temp, hum, date)
+        err = writeIntoDB(temp, hum, date)
+        return {"job": {"temp": temp, "hum": hum, "date": date}, "statusdb": err, "statustxt": sta}
 
 
-# Data should come as fill:temp=1,hum=1,date=1
-api.add_resource(MyData, '/fill:temp=<int:temp>,hum=<int:hum>,date=<int:date>')
+# Data should come as /date=s;hum=1,temp=1
+api.add_resource(MyData, '/date=<string:date>;temp=<int:temp>;hum=<int:hum>')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="10.207.12.116", debug=True)
